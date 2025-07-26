@@ -1,3 +1,5 @@
+**/checkpoints/**
+**/saved_weights/**
 **/*.pt
 **/.idea/*
 **/plots/**

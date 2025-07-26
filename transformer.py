@@ -5,14 +5,14 @@ from time import time
 
 
 class RenjuPositionTransformer(nn.Module):
-    def __init__(self, vocab_size, start_token_id, pad_token_id, emb_dim=128, n_heads=4, n_layers=4, device='cpu'):
+    def __init__(self, vocab_size, start_token_id, pad_token_id, emb_dim=128, n_heads=4, n_layers=4, dim_ffn=128*4, device='cpu'):
         super().__init__()
         self.vocab_size = vocab_size
         self.start_token_id = start_token_id
         self.pad_token_id = pad_token_id
 
         self.embedding = nn.Embedding(vocab_size, emb_dim)
-        self.decoder_layer = nn.TransformerEncoderLayer(d_model=emb_dim, nhead=n_heads)
+        self.decoder_layer = nn.TransformerEncoderLayer(d_model=emb_dim, nhead=n_heads, dim_feedforward=dim_ffn)
         self.decoder = nn.TransformerEncoder(self.decoder_layer, num_layers=n_layers)
         self.ln = nn.LayerNorm(emb_dim)
         self.head = nn.Linear(emb_dim, vocab_size)
