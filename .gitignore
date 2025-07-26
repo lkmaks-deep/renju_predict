@@ -1,2 +1,8 @@
 **/*.pt
 **/.idea/*
+**/plots/**
+**/wandb/**
+**/__pycache__/**
+
+
+
