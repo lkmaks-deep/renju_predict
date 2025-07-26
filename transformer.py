@@ -1,10 +1,11 @@
 import torch
 from torch import nn
 import wandb
+from time import time
 
 
 class RenjuPositionTransformer(nn.Module):
-    def __init__(self, vocab_size, start_token_id, pad_token_id, emb_dim=128, n_heads=4, n_layers=4):
+    def __init__(self, vocab_size, start_token_id, pad_token_id, emb_dim=128, n_heads=4, n_layers=4, device='cpu'):
         super().__init__()
         self.vocab_size = vocab_size
         self.start_token_id = start_token_id
@@ -16,12 +17,14 @@ class RenjuPositionTransformer(nn.Module):
         self.ln = nn.LayerNorm(emb_dim)
         self.head = nn.Linear(emb_dim, vocab_size)
 
+        self.device = device
+
     def forward(self, x):
         """
         x: [batch_size, seq_len]
         return: [seq_len, batch_size, vocab_size]
         """
-        x = torch.cat([torch.full((x.shape[0], 1), self.start_token_id, dtype=torch.long), x], dim=1)
+        x = torch.cat([torch.full((x.shape[0], 1), self.start_token_id, dtype=torch.long).to(self.device), x], dim=1)
         tokens = x.clone()
         # (N, T)
         x = self.embedding(x) # (N, T, E)
@@ -31,15 +34,16 @@ class RenjuPositionTransformer(nn.Module):
         for i in range(T):
             x[:,i,0] = i % 2
 
-        mask = nn.Transformer.generate_square_subsequent_mask(T)
+        mask = nn.Transformer.generate_square_subsequent_mask(T).to(self.device)
         x = x.transpose(0, 1) # (T, N, E)
         x = self.decoder(x, mask=mask, src_key_padding_mask=(tokens == self.pad_token_id))
         x = self.ln(x)
         x = self.head(x)
         return x
 
-    def generate(self, n=10):
-        position = torch.zeros((1, 0), dtype=torch.long)
+    def generate(self, moves, n=10, W=15):
+        tokens = transform_to_tokens(moves, W)
+        position = torch.LongTensor(tokens).view(1, -1)
         for i in range(n):
             logits = self.forward(position)[-1,0].detach()
             probs = nn.functional.softmax(logits, dim=-1)
@@ -49,7 +53,7 @@ class RenjuPositionTransformer(nn.Module):
             probs /= torch.sum(probs)
 
             token = torch.multinomial(probs, 1)
-            position = torch.cat((position, torch.LongTensor([[token]])), dim=1)
+            position = torch.cat([ position, torch.LongTensor([[token]]).to(self.device)], dim=1)
 
         result = [(p // 15, p % 15) for p in position[0]]
         return result
@@ -64,10 +68,13 @@ def PerplexityLoss(logits, true_tokens, pad_token_id=15*15):
     Returns: loss
 
     """
-
-    loss_fn = nn.CrossEntropyLoss()
     true_tokens = true_tokens.transpose(0, 1)
-    return loss_fn(logits[:-1,:,:].view(-1, logits.size(-1)), true_tokens.reshape(-1))
+    mask = (true_tokens != pad_token_id)
+    flat_logits = logits[:-1,:,:].view(-1, logits.size(-1))
+    flat_tokens = true_tokens.reshape(-1)
+    flat_mask = mask.reshape(-1)
+    log_probs = nn.functional.log_softmax(flat_logits, dim=-1) * flat_mask.view(-1, 1)
+    return torch.mean(-log_probs[torch.arange(flat_tokens.shape[0]),flat_tokens])
 
 
 class RenjuPositionsDatasetFullPositions(torch.utils.data.Dataset):
@@ -110,6 +117,8 @@ def pad_tokens(arrs_list, pad_token_id=15*15):
 
 
 def train(name='renju'):
+    device = torch.device('mps' if torch.mps.is_available() else 'cpu')
+    print('USING DEVICE:', device)
     batch_size = 64
     val_batches = 50
     eval_every = 100
@@ -128,7 +137,10 @@ def train(name='renju'):
         val_dataset, batch_size=batch_size, shuffle=False, collate_fn=collate
     )
 
-    model = RenjuPositionTransformer(vocab_size=start_token_id + 1, start_token_id=start_token_id, pad_token_id=pad_token_id)
+    model = RenjuPositionTransformer(vocab_size=start_token_id + 1,
+                                     start_token_id=start_token_id,
+                                     pad_token_id=pad_token_id,
+                                     device=device).to(device)
     optimizer = torch.optim.Adam(model.parameters())
 
     loss_fn = PerplexityLoss
@@ -143,11 +155,13 @@ def train(name='renju'):
         config=dict(batch_size=batch_size),
     )
 
+    ts = []
+
     for epoch in range(100):
         for batch_idx, data in enumerate(train_dataloader):
             data = [transform_to_tokens(lst) for lst in data]
             data = pad_tokens(data, pad_token_id=pad_token_id)
-            data = torch.tensor(data, dtype=torch.long)
+            data = torch.tensor(data, dtype=torch.long).to(device)
 
             x = model(data)
             loss = loss_fn(x, data)
@@ -162,7 +176,7 @@ def train(name='renju'):
                 for val_batch_idx, data in enumerate(val_dataloader):
                     data = [transform_to_tokens(lst) for lst in data]
                     data = pad_tokens(data, pad_token_id=pad_token_id)
-                    data = torch.tensor(data, dtype=torch.long)
+                    data = torch.tensor(data, dtype=torch.long).to(device)
 
                     x = model(data.clone())
                     loss = loss_fn(x, data)
@@ -172,9 +186,13 @@ def train(name='renju'):
                 sum_val_loss = sum_val_loss / len(val_dataloader)
                 print(f'{name}_{epoch}_{batch_idx}', sum_val_loss)
 
+                ts.append(time())
+                if len(ts) >= 2:
+                    print(f'Time per {eval_every} batches: {ts[-1] - ts[-2]:.2f}s')
+
 
             run.log({"loss": loss.item(), 'val_loss': sum_val_loss})
 
 
 if __name__ == '__main__':
-    train()
+    train('fixed_loss')

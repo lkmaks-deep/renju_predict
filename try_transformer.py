@@ -66,10 +66,11 @@ model = RenjuPositionTransformer(
     pad_token_id=pad_token_id,
 )
 
-dc = torch.load('./checkpoints_transformer/renju_2_0.pt')
+dc = torch.load('./checkpoints_transformer/fixed_loss_9_600.pt')
 model.load_state_dict(dc)
 
-moves = model.generate(15)
+
+moves = model.generate([(7, 7), (6, 7), (9, 7)], 15)
 
 # for i in range(len(moves)):
 #     plot_renju_board(moves[:i+1], f'after_{i+1}')

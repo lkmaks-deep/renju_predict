@@ -51,7 +51,7 @@ def make_pos_tensor(moves):
 
 moves = [(7, 7), (6, 7), (9, 7)]
 color = 1
-plot_renju_board(moves, 'start_pos')
+plot_renju_board(moves, 'p')
 
 
 h, w = 15, 15
