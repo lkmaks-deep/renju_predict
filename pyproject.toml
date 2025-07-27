@@ -1,0 +1,20 @@
+[project]
+name = "renju-predict"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Maxim",email = "mlavrik-karmazin@deeporigin.com"}
+]
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "torch (>=2.7.1,<3.0.0)",
+    "transformers (>=4.54.0,<5.0.0)",
+    "wandb (>=0.21.0,<0.22.0)",
+    "matplotlib (>=3.10.3,<4.0.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"

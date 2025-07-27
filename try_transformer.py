@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import torch
 from torch import nn
-from transformer import RenjuPositionTransformer
+from train_transformer import RenjuPositionTransformer, RPTConfig
 
 
 def plot_renju_board(moves, name='renjuboard'):
@@ -60,19 +60,20 @@ H, W = 15, 15
 pad_token_id = H * W
 start_token_id = pad_token_id + 1
 
+
+config = RPTConfig.from_json_file('configs/config_fixed_loss_2048dim.json')
+
 model = RenjuPositionTransformer(
-    vocab_size=start_token_id + 1,
-    start_token_id=start_token_id,
-    pad_token_id=pad_token_id,
+    **config.to_dict()
 )
 
-dc = torch.load('./checkpoints_transformer/fixed_loss_9_600.pt')
+dc = torch.load('./checkpoints_transformer/fixed_loss_40_200.pt')
 model.load_state_dict(dc)
 
-
-moves = model.generate([(7, 7), (6, 7), (9, 7)], 15)
+moves = model.generate([(2, 6), (2, 7), (2, 8)], 15)
 
 # for i in range(len(moves)):
 #     plot_renju_board(moves[:i+1], f'after_{i+1}')
 
 plot_renju_board(moves, 'start_pos')
+

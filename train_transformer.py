@@ -2,10 +2,23 @@ import torch
 from torch import nn
 import wandb
 from time import time
+from transformers import PretrainedConfig
+
+
+class RPTConfig(PretrainedConfig):
+    def __init__(self, vocab_size, start_token_id, pad_token_id, emb_dim=128, n_heads=4, n_layers=4, dim_ffn=2048, **kwargs):
+        super().__init__(**kwargs)
+        self.vocab_size = vocab_size
+        self.start_token_id = start_token_id
+        self.pad_token_id = pad_token_id
+        self.emb_dim = emb_dim
+        self.n_heads = n_heads
+        self.n_layers = n_layers
+        self.dim_ffn = dim_ffn
 
 
 class RenjuPositionTransformer(nn.Module):
-    def __init__(self, vocab_size, start_token_id, pad_token_id, emb_dim=128, n_heads=4, n_layers=4, dim_ffn=128*4, device='cpu'):
+    def __init__(self, vocab_size, start_token_id, pad_token_id, emb_dim=128, n_heads=4, n_layers=4, dim_ffn=2048, device='cpu', **kwrgs):
         super().__init__()
         self.vocab_size = vocab_size
         self.start_token_id = start_token_id
@@ -18,6 +31,8 @@ class RenjuPositionTransformer(nn.Module):
         self.head = nn.Linear(emb_dim, vocab_size)
 
         self.device = device
+
+        self.config = RPTConfig(vocab_size, start_token_id, pad_token_id, emb_dim, n_heads, n_layers, dim_ffn)
 
     def forward(self, x):
         """
@@ -58,23 +73,11 @@ class RenjuPositionTransformer(nn.Module):
         result = [(p // 15, p % 15) for p in position[0]]
         return result
 
-
-def PerplexityLoss(logits, true_tokens, pad_token_id=15*15):
-    """
-    Args:
-        logits: [seq_len, batch_size, vocab_size]
-        true_tokens: [batch_size, seq_len]
-
-    Returns: loss
-
-    """
-    true_tokens = true_tokens.transpose(0, 1)
-    mask = (true_tokens != pad_token_id)
-    flat_logits = logits[:-1,:,:].view(-1, logits.size(-1))
-    flat_tokens = true_tokens.reshape(-1)
-    flat_mask = mask.reshape(-1)
-    log_probs = nn.functional.log_softmax(flat_logits, dim=-1) * flat_mask.view(-1, 1)
-    return torch.mean(-log_probs[torch.arange(flat_tokens.shape[0]),flat_tokens])
+    def save_config(self, path):
+        config_dict = self.config.to_dict()
+        import json
+        with open(path, "w") as f:
+            json.dump(config_dict, f, indent=2)
 
 
 class RenjuPositionsDatasetFullPositions(torch.utils.data.Dataset):
@@ -95,7 +98,6 @@ class RenjuPositionsDatasetFullPositions(torch.utils.data.Dataset):
     def __getitem__(self, i):
         return self.positions[i]
 
-
 def collate(batch):
     return batch
 
@@ -113,6 +115,25 @@ def pad_tokens(arrs_list, pad_token_id=15*15):
     return res
 
 
+
+
+
+def PerplexityLoss(logits, true_tokens, pad_token_id=15*15):
+    """
+    Args:
+        logits: [seq_len, batch_size, vocab_size]
+        true_tokens: [batch_size, seq_len]
+
+    Returns: loss
+
+    """
+    true_tokens = true_tokens.transpose(0, 1)
+    mask = (true_tokens != pad_token_id)
+    flat_logits = logits[:-1,:,:].view(-1, logits.size(-1))
+    flat_tokens = true_tokens.reshape(-1)
+    flat_mask = mask.reshape(-1)
+    log_probs = nn.functional.log_softmax(flat_logits, dim=-1) * flat_mask.view(-1, 1)
+    return torch.mean(-log_probs[torch.arange(flat_tokens.shape[0]),flat_tokens])
 
 
 
@@ -141,6 +162,8 @@ def train(name='renju'):
                                      start_token_id=start_token_id,
                                      pad_token_id=pad_token_id,
                                      device=device).to(device)
+    model.save_config(f'configs/config_{name}.json')
+
     optimizer = torch.optim.Adam(model.parameters())
 
     loss_fn = PerplexityLoss
@@ -172,6 +195,7 @@ def train(name='renju'):
 
             if batch_idx % eval_every == 0:
                 torch.save(model.state_dict(), f"./checkpoints_transformer/{name}_{epoch}_{batch_idx}.pt")
+
                 sum_val_loss = 0
                 for val_batch_idx, data in enumerate(val_dataloader):
                     data = [transform_to_tokens(lst) for lst in data]
@@ -195,4 +219,4 @@ def train(name='renju'):
 
 
 if __name__ == '__main__':
-    train('fixed_loss')
+    train('fixed_loss_2048dim')
