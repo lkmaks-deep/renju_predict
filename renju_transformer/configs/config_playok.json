@@ -1,0 +1,6 @@
+{
+  "d_model": 128,
+  "nhead": 4,
+  "n_layers": 1,
+  "dim_ffn": 1024
+}

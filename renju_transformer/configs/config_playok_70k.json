@@ -1,0 +1,11 @@
+{
+  "H": 15,
+  "W": 15,
+  "vocab_size": 227,
+  "start_token_id": 225,
+  "pad_token_id": 226,
+  "d_model": 256,
+  "nhead": 4,
+  "n_layers": 1,
+  "dim_ffn": 1024
+}

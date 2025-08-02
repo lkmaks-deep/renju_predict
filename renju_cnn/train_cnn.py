@@ -4,7 +4,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-
 def exponential_smoothing(series, alpha):
     """
     Apply exponential smoothing to a 1D tensor.
@@ -17,16 +16,16 @@ def exponential_smoothing(series, alpha):
 
 
 class RenjuPositionsDataset(torch.utils.data.Dataset):
-    def __init__(self, filename='positions.txt', from_line=0, to_line=100_000):
+    def __init__(self, filename="positions.txt", from_line=0, to_line=100_000):
         super().__init__()
         self.positions = []
         self.pref_lengths = [0]
-        for li, line in enumerate(open(filename, 'r')):
+        for li, line in enumerate(open(filename, "r")):
             if len(line.strip()) == 0:
                 continue
             if from_line <= li and li <= to_line:
-                moves = line.strip().split(';')
-                moves = [(int(m.split(',')[0]), int(m.split(',')[1])) for m in moves]
+                moves = line.strip().split(";")
+                moves = [(int(m.split(",")[0]), int(m.split(",")[1])) for m in moves]
                 self.positions.append(moves)
                 self.pref_lengths.append(self.pref_lengths[-1] + len(moves))
 
@@ -46,7 +45,12 @@ class RenjuPositionsDataset(torch.utils.data.Dataset):
         for i, m in enumerate(moves):
             position[m[0], m[1]] = 2 * (1 - i % 2) - 1
 
-        return position, i % 2, self.positions[pos_id][i][0], self.positions[pos_id][i][1]
+        return (
+            position,
+            i % 2,
+            self.positions[pos_id][i][0],
+            self.positions[pos_id][i][1],
+        )
 
 
 # model = nn.Sequential(nn.Conv2d(2, 4, 3, padding=1),
@@ -67,26 +71,31 @@ batch_size = 64
 train_dataset = RenjuPositionsDataset(from_line=0, to_line=100_000)
 val_dataset = RenjuPositionsDataset(from_line=100_001, to_line=100_000 + 1024)
 
-train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+train_dataloader = torch.utils.data.DataLoader(
+    train_dataset, batch_size=batch_size, shuffle=True
+)
+val_dataloader = torch.utils.data.DataLoader(
+    val_dataset, batch_size=batch_size, shuffle=False
+)
 
 h, w = 15, 15
 n_in = h * w
-model = nn.Sequential(nn.Flatten(),
-                      nn.Linear(n_in, n_in * 2),
-                      nn.BatchNorm1d(n_in * 2),
-                      nn.ReLU(),
-                      nn.Linear(n_in * 2, n_in * 4),
-                      nn.BatchNorm1d(n_in * 4),
-                      nn.ReLU(),
-                      nn.Linear(n_in * 4, n_in * 4),
-                      nn.BatchNorm1d(n_in * 4),
-                      nn.ReLU(),
-                      nn.Linear(n_in * 4, n_in * 4),
-                      nn.BatchNorm1d(n_in * 4),
-                      nn.ReLU(),
-                      nn.Linear(n_in * 4, n_in * 2),
-                      )
+model = nn.Sequential(
+    nn.Flatten(),
+    nn.Linear(n_in, n_in * 2),
+    nn.BatchNorm1d(n_in * 2),
+    nn.ReLU(),
+    nn.Linear(n_in * 2, n_in * 4),
+    nn.BatchNorm1d(n_in * 4),
+    nn.ReLU(),
+    nn.Linear(n_in * 4, n_in * 4),
+    nn.BatchNorm1d(n_in * 4),
+    nn.ReLU(),
+    nn.Linear(n_in * 4, n_in * 4),
+    nn.BatchNorm1d(n_in * 4),
+    nn.ReLU(),
+    nn.Linear(n_in * 4, n_in * 2),
+)
 
 
 # model.load_state_dict(torch.load('./checkpoints/model_0_14756.pt'))
@@ -98,7 +107,7 @@ losses = []
 val_losses = []
 
 N_iters = len(train_dataset) // batch_size
-print(N_iters, 'iterations in one epoch')
+print(N_iters, "iterations in one epoch")
 
 for epoch in range(2, 100):
     sum_loss = 0
@@ -109,7 +118,7 @@ for epoch in range(2, 100):
         loss = 0
         for i in range(pos.shape[0]):
             start = n_in * color[i]
-            loss += nn.CrossEntropyLoss()(logits[i][start:start+n_in], labels[i])
+            loss += nn.CrossEntropyLoss()(logits[i][start : start + n_in], labels[i])
         loss /= pos.shape[0]
 
         loss.backward()
@@ -129,7 +138,9 @@ for epoch in range(2, 100):
                 val_loss = 0
                 for i in range(pos.shape[0]):
                     start = n_in * color[i]
-                    val_loss += nn.CrossEntropyLoss()(logits[i][start:start + n_in], labels[i])
+                    val_loss += nn.CrossEntropyLoss()(
+                        logits[i][start : start + n_in], labels[i]
+                    )
                 val_loss /= pos.shape[0]
 
                 sum_val_loss += val_loss.item()
@@ -141,11 +152,10 @@ for epoch in range(2, 100):
         plt.plot(exponential_smoothing(val_losses, alpha=0.9))
         plt.show()
 
-        print(f'EPOCH {epoch}:', losses[-1], val_losses[-1])
+        print(f"EPOCH {epoch}:", losses[-1], val_losses[-1])
         # -log(p) = loss
         # p = e^-loss
         print(np.exp(-val_losses[-1]), 1 / 225)
 
         if n % (N_iters // 100) == 0:
-            torch.save(model.state_dict(), f'./checkpoints/model_{epoch}_{n}.pt')
-
+            torch.save(model.state_dict(), f"./checkpoints/model_{epoch}_{n}.pt")
